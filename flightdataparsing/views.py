@@ -60,17 +60,20 @@ def filteringFlightsForToday(flights):
     count = 1
     deleted = []
     for i,flight in enumerate(flights) :
-        time = datetime.datetime.strptime(flight["time"], modelTime)
-        gate = getValueGate(flight["gate"])
-        if "None" in flight.values() :
+        try :
+            time = datetime.datetime.strptime(flight["time"], modelTime)
+            gate = getValueGate(flight["gate"])
+            if "None" in flight.values() :
+                deleted.append(i)
+            elif time.day != today.day or time.month != today.month or time.year != today.year :
+                deleted.append(i)
+            elif int(gate) < 62 or int(gate) > 68 :
+                deleted.append(i)
+            else :
+                flight["num"] = count
+                count += 1
+        except :
             deleted.append(i)
-        elif time.day != today.day or time.month != today.month or time.year != today.year :
-            deleted.append(i)
-        elif int(gate) < 62 or int(gate) > 68 :
-            deleted.append(i)
-        else :
-            flight["num"] = count
-            count += 1
     for i in deleted[::-1] :
         flights.pop(i)
     return flights

@@ -1,82 +1,113 @@
 from django.shortcuts import render
-import json, requests, datetime
-url = "https://www.admtl.com/en/admtldata/api/flight?type=departure&sort=field_planned&direction=ASC&rule=24h"
+import json
+import pandas as pd
+import cloudscraper
 
-wanted = ['id', 'type', 'flight','time', 'company', 'compagny_without_accent','destination', 'gate']
+url = "https://www.admtl.com/en-CA/webruntime/api/apex/execute?language=en-CA&asGuest=true&htmlEncode=false"
 
-displayWanted = ["ID", "DEPARTURE/ARRIVAL", "FLIGHT","TIME","COMPANY","DESTINATION","GATE"]
+payload = {
+    "namespace": "",
+    "classname": "@udd/01pMm00000AWKuH",
+    "method": "getFlights",
+    "isContinuation": False,
+    "params": {
+        "language": "en-CA",
+        "page": "departures"
+    },
+    "cacheable": False
+}
 
-modelTime = "%Y %b. %d %H:%M"
-
-today = datetime.datetime.now()
 
 def displayingFlights(request):
-    flights = convertingFlightsToList()
-    flights = filteringFlightsForToday(flights)
-    flights.sort(key = sortingCriteria)
+    flights_df = process_flights_to_df(url)
+    flights_df.to_dict('split')
     context = {
-        'flights' :flights,
-        'categories' : displayWanted
+        'flights' :flights_df['data'],
+        'categories' : flights_df['columns']
     }
     return render(request, 'displayTable.html', context)
 
-def convertingFlightsToList() :
-    values=[]
-    response = requests.get(url)
-    data = response.json()["data"]
 
-    for flights in data :
-        flight = {}
-        for categorie in wanted :
-            if categorie == "time" :
-                if changingTimeString(flights["revised_date"],flights["revised_hour"]) == "Nothing" :
-                    flight[categorie] = changingTimeString(flights["planned_date"],flights["planned_hour"])
-                else :
-                    flight[categorie] = changingTimeString(flights["revised_date"],flights["revised_hour"]) 
-            elif categorie == 'compagny_without_accent' :
-                flight['company'] += f" - ({flights[categorie].strip()})" 
-            elif flights[categorie] :
-                flight[categorie] =  flights[categorie].strip() 
-            else : 
-                flight[categorie] =  f"None"
-        values.append(flight)
-    
-    return values
+def fetch_flight_data(url):
+    response = cloudscraper.create_scraper().post(url, json=payload)
+    response.raise_for_status()
+    return response
 
-def changingTimeString(date,hour) :
-    if not hour or not date :
-        return 'Nothing'
-    month,day = date.split(" ")
-    if len(day) == 1 : day = "0" + day
-    year = datetime.datetime.now().year
-    return f"{year} {month} {day} {hour}"
 
-def getValueGate(gate):
-    if "A" <= gate[-1] <= "Z" :
-        return gate[:-1]
-    return gate
+def parse_json_content(response_content):
+    """
+    Parse JSON content from the response content.
 
-def filteringFlightsForToday(flights):
-    count = 1
-    deleted = []
-    for i,flight in enumerate(flights) :
-        try :
-            time = datetime.datetime.strptime(flight["time"], modelTime)
-            gate = getValueGate(flight["gate"])
-            if "None" in flight.values() :
-                deleted.append(i)
-            elif time.day != today.day or time.month != today.month or time.year != today.year :
-                deleted.append(i)
-            elif int(gate) < 62 or int(gate) > 68 :
-                deleted.append(i)
-            else :
-                flight["num"] = count
-                count += 1
-        except :
-            deleted.append(i)
-    for i in deleted[::-1] :
-        flights.pop(i)
-    return flights
+    Args:
+    response_content (bytes): The response content in bytes.
 
-def sortingCriteria(a) :
-    return datetime.datetime.strptime(a["time"], modelTime)
+    Returns:
+    dict: The parsed JSON content as a dictionary.
+    """
+    return json.loads(response_content)
+
+
+def format_json_data(json_data):
+    """
+    Format JSON data with indentation for better readability.
+
+    Args:
+    json_data (dict): The JSON data to format.
+
+    Returns:
+    str: The formatted JSON data as a string.
+    """
+    return json.dumps(json_data, indent=4)
+
+
+def convert_to_dataframe(json_data, key='returnValue', section='flightsForToday'):
+    """
+    Convert JSON data to a pandas DataFrame.
+
+    Args:
+    json_data (dict): The JSON data to convert.
+    key (str): The key in the JSON data that contains the list of records.
+
+    Returns:
+    pandas.DataFrame: The resulting DataFrame.
+    """
+    return pd.json_normalize(json_data[key][section])
+
+
+
+def process_flights_to_df(url):
+    # Fetch the flight data
+    response = fetch_flight_data(url)
+    print(f"HTTP Status Code: {response.status_code}")
+
+    # Step 1: Raw Data
+    #step_separator("FIRST STEP RAW DATA")
+    raw_data = response.content
+    #print(raw_data)
+
+    # Step 2: Structured Data
+    #step_separator("SECOND STEP STRUCTURED DATA")
+    structured_data = parse_json_content(raw_data)
+    #print(structured_data)
+
+    formatted_data = format_json_data(structured_data)
+    #print(formatted_data)  # Pretty print the JSON data
+
+    # Step 3: JSON Format Data
+    # step_separator("THIRD STEP JSON FORMAT DATA")
+    flights_df = convert_to_dataframe(structured_data)
+    #print(flights_df.columns)
+
+    flights_df.rename(columns={
+        'TerminalGate': 'gate',
+        'FormattedScheduledTime': 'time',
+        'FormattedUpdatedTime': 'updatedTime',
+        'OperationalStatusDescription': 'status'
+    }, inplace=True)
+
+
+    new_columns_of_interest = ['AirlineName', 'gate', 'time', 'updatedTime', 'AirportName', 'status', 'UniqueDisplayNo']
+
+    new_df = flights_df[new_columns_of_interest]
+
+    return new_df

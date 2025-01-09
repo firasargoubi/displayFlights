@@ -20,13 +20,11 @@
         {%for flight in flights%}
           <tr>
             <th scope="row">{{flight.num}}</th>
-            <td>{{flight.id}}</td>
-            <td>{{flight.type}}</td>
-            <td>{{flight.flight}}</td>
-            <td>{{flight.time}}</td>
-            <td>{{flight.company}}</td>
-            <td>{{flight.destination}}</td>
-            <td>{{flight.gate}}</td>
+            <td>{{flight.0}}</td>
+            <td>{{flight.1}}</td>
+            <td>{{flight.2}}</td>
+            <td>{{flight.3}}</td>
+            <td>{{flight.4}}</td>
           </tr>
         {%endfor%}
         </tbody>

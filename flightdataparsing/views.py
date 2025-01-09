@@ -20,10 +20,10 @@ payload = {
 
 def displayingFlights(request):
     flights_df = process_flights_to_df(url)
-    flights_df.to_dict('split')
+    flight = flights_df.to_dict('split')
     context = {
-        'flights' :flights_df['data'],
-        'categories' : flights_df['columns']
+        'flights' :flight['data'],
+        'categories' : flight['columns']
     }
     return render(request, 'displayTable.html', context)
 

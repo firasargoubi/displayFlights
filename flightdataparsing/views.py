@@ -109,5 +109,11 @@ def process_flights_to_df(url):
     new_columns_of_interest = ['AirlineName', 'gate', 'time', 'updatedTime', 'AirportName', 'status', 'UniqueDisplayNo']
 
     new_df = flights_df[new_columns_of_interest]
+    
+    new_df['gate'] = new_df['gate'].str.extract('(\d+)')  # Extract digits
+    new_df = new_df.dropna()
+    new_df['gate'] = new_df['gate'].astype(int)
 
-    return new_df
+    filtered_df = new_df[(new_df['gate'] >= 62) & (new_df['gate'] <= 68)]
+
+    return filtered_df
